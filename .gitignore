@@ -25,11 +25,6 @@ venv/
 env/
 ENV/
 
-# PyTorch
-*.pth
-*.pt
-*.pkl
-
 # IDE
 .idea/
 .vscode/
