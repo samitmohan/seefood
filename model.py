@@ -7,7 +7,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms, models
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-
+from tqdm import tqdm
 
 class EarlyStopping:
     def __init__(self, patience: int = 7, min_delta: float = 0):
@@ -29,10 +29,15 @@ class EarlyStopping:
             self.counter = 0
         return self.should_stop
 
+def create_data_loaders(
+    data_dir: str, batch_size: int = 16
+) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    data_dir = Path(data_dir)
+    train_dir = data_dir / "train"
+    test_dir = data_dir / "test"
 
-def create_data_loaders( data_dir: str, batch_size: int = 16, train_split: float = 0.8) -> Tuple[DataLoader, DataLoader, DataLoader]:
-    if not os.path.exists(data_dir):
-        raise FileNotFoundError(f"Data directory {data_dir} not found")
+    if not train_dir.is_dir() or not test_dir.is_dir():
+        raise FileNotFoundError(f"Could not find train or test directory in {data_dir}")
 
     train_transform = transforms.Compose(
         [
@@ -45,7 +50,7 @@ def create_data_loaders( data_dir: str, batch_size: int = 16, train_split: float
         ]
     )
 
-    val_transform = transforms.Compose(
+    test_transform = transforms.Compose(
         [
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -54,16 +59,8 @@ def create_data_loaders( data_dir: str, batch_size: int = 16, train_split: float
         ]
     )
 
-    full_dataset = datasets.ImageFolder(data_dir)
-
-    train_size = int(train_split * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        full_dataset, [train_size, val_size]
-    )
-
-    train_dataset.dataset.transform = train_transform
-    val_dataset.dataset.transform = val_transform
+    train_dataset = datasets.ImageFolder(train_dir, transform=train_transform)
+    test_dataset = datasets.ImageFolder(test_dir, transform=test_transform)
 
     train_loader = DataLoader(
         train_dataset,
@@ -72,12 +69,11 @@ def create_data_loaders( data_dir: str, batch_size: int = 16, train_split: float
         num_workers=4,
         pin_memory=True,
     )
-    val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, num_workers=4, pin_memory=True
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, num_workers=4, pin_memory=True
     )
 
-    return train_loader, val_loader
-
+    return train_loader, test_loader
 
 def train_model( model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, criterion: nn.Module, optimizer: torch.optim.Optimizer, num_epochs: int = 10, patience: int = 7,) -> Tuple[nn.Module, dict]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,7 +89,7 @@ def train_model( model: nn.Module, train_loader: DataLoader, val_loader: DataLoa
         train_preds = []
         train_true = []
 
-        for inputs, labels in train_loader:
+        for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} [Train]"):
             inputs, labels = inputs.to(device), labels.to(device)
 
             optimizer.zero_grad()
@@ -114,7 +110,7 @@ def train_model( model: nn.Module, train_loader: DataLoader, val_loader: DataLoa
         val_true = []
 
         with torch.no_grad():
-            for inputs, labels in val_loader:
+            for inputs, labels in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} [Val]"):
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
@@ -134,9 +130,7 @@ def train_model( model: nn.Module, train_loader: DataLoader, val_loader: DataLoa
         history["train_acc"].append(train_acc)
         history["val_acc"].append(val_acc)
 
-        print(f"Epoch {epoch + 1}/{num_epochs}:")
-        print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
-        print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        print(f"Epoch {epoch + 1}/{num_epochs}: Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
         if early_stopping(val_loss):
             print("Early stopping triggered")
@@ -144,12 +138,11 @@ def train_model( model: nn.Module, train_loader: DataLoader, val_loader: DataLoa
 
     return model, history
 
-
 def main():
     torch.manual_seed(42)
 
     try:
-        data_dir = "/Users/smol/fun/hotdog-nothotdog/data/hotdog-nothotdog"
+        data_dir = "data/hotdog-nothotdog"
         train_loader, val_loader = create_data_loaders(data_dir)
 
         model = models.resnet18(pretrained=True)
@@ -181,7 +174,6 @@ def main():
     except Exception as e:
         print(f"Error during training: {str(e)}")
         raise
-
 
 if __name__ == "__main__":
     main()
