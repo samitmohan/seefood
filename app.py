@@ -12,7 +12,7 @@ def load_model(model_path: str):
         model.fc = torch.nn.Linear(model.fc.in_features, 2)
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.to(device)
         model.eval()
@@ -54,9 +54,25 @@ def main():
         layout="centered"
     )
     
-    st.title("🌭 SeeFood")
-    st.write("**Is it a hotdog, or not a hotdog?**")
+    # Custom CSS for styling
+    st.markdown("""
+        <style>
+        .title {
+            font-family: 'Helvetica Neue', sans-serif;
+            color: #1E90FF; /* A nice blue color */
+            text-align: center;
+        }
+        .description {
+            text-align: center;
+            color: black;
+            font-style: italic;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
+    st.markdown('<h1 class="title">SeeFood</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="description">What would you say if I told you there is an app on the market that tells you if you have a hotdog or not a hotdog.</p>', unsafe_allow_html=True)
+
     model_path = Path('hotdog_model.pth')
     if not model_path.exists():
         st.error("Model file not found. Please run `python model.py` to train the model first.")
@@ -75,7 +91,7 @@ def main():
     if uploaded_file is not None:
         try:
             image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, caption='Uploaded Image', use_column_width=True)
+            st.image(image, caption='Uploaded Image', use_container_width=True)
             
             image_tensor = process_image(image)
             if image_tensor is not None:
